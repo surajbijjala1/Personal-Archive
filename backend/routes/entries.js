@@ -19,9 +19,9 @@ router.get("/", auth, async (req, res) => {
 });
 
 router.post("/", auth, async (req, res) => {
-  const { text, activity } = req.body;
+  const { text, activity, mood, mood_label } = req.body;
   const { data, error } = await supabase.from("entries")
-    .insert({ username: req.user.username, text, activity }).select().single();
+    .insert({ username: req.user.username, text, activity, mood: mood || null, mood_label: mood_label || null }).select().single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
