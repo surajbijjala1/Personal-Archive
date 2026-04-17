@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { hasToken, clearToken, getEntries, createEntry, deleteEntry, register, login } from "./api.js";
+import {
+  hasToken, clearToken,
+  getEntries, createEntry, deleteEntry,
+  register, login, getMe,
+} from "./api.js";
 
 import PinPad from "./components/PinPad.jsx";
 import Header from "./components/Header.jsx";
@@ -18,31 +22,39 @@ const FEATURES = [
 ];
 
 export default function App() {
-  const [screen, setScreen] = useState("loading"); // loading | welcome | setup | login | app
+  const [screen, setScreen] = useState("loading");
   const [entries, setEntries] = useState([]);
-  const [activeTab, setActiveTab] = useState("journal"); // journal | mood
+  const [activeTab, setActiveTab] = useState("journal");
   const [onThisDay, setOnThisDay] = useState([]);
   const [showOTD, setShowOTD] = useState(false);
   const [saving, setSaving] = useState(false);
   const [authError, setAuthError] = useState("");
 
-  // On mount, check if we have a valid token
+  // User / AI state
+  const [chatCount, setChatCount] = useState(0);
+  const [freeLimit, setFreeLimit] = useState(10);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+
   useEffect(() => {
     if (hasToken()) {
-      loadEntries();
+      loadApp();
     } else {
       setScreen("welcome");
     }
   }, []);
 
-  const loadEntries = async () => {
+  const loadApp = async () => {
     try {
-      const data = await getEntries();
+      const [data, me] = await Promise.all([getEntries(), getMe()]);
       setEntries(data || []);
       checkOnThisDay(data || []);
+      setChatCount(me.chatCount);
+      setFreeLimit(me.freeLimit);
+      setHasApiKey(me.hasApiKey);
+      setIsOwner(me.isOwner);
       setScreen("app");
     } catch {
-      // Token is invalid or expired
       clearToken();
       setScreen("login");
     }
@@ -62,20 +74,18 @@ export default function App() {
     );
   };
 
-  // Auth handlers
   const handleSetup = async (username, pin) => {
     setAuthError("");
     await register(username, pin);
-    await loadEntries();
+    await loadApp();
   };
 
   const handleLogin = async (username, pin) => {
     setAuthError("");
     await login(username, pin);
-    await loadEntries();
+    await loadApp();
   };
 
-  // Entry handlers
   const handleSaveEntry = async (text, activity) => {
     setSaving(true);
     try {
@@ -109,9 +119,7 @@ export default function App() {
       })
       .join("\n\n---\n\n");
     const blob = new Blob(
-      [
-        `MY INNER ARCHIVE\nExported: ${new Date().toLocaleString()}\nEntries: ${entries.length}\n\n${"═".repeat(40)}\n\n${lines}`,
-      ],
+      [`MY INNER ARCHIVE\nExported: ${new Date().toLocaleString()}\nEntries: ${entries.length}\n\n${"═".repeat(40)}\n\n${lines}`],
       { type: "text/plain" }
     );
     const a = document.createElement("a");
@@ -126,7 +134,7 @@ export default function App() {
     setScreen("login");
   };
 
-  // --- SCREENS ---
+  // ── Screens ──────────────────────────────────────────────────────────────
 
   if (screen === "loading") {
     return (
@@ -145,7 +153,6 @@ export default function App() {
           <div className="welcome-desc">
             A private space to capture your thoughts and let AI reflect your own wisdom back to you.
           </div>
-
           <div className="welcome-features">
             {FEATURES.map(([icon, title, desc]) => (
               <div key={title} className="welcome-feature">
@@ -157,7 +164,6 @@ export default function App() {
               </div>
             ))}
           </div>
-
           <button className="welcome-cta" onClick={() => setScreen("setup")}>
             Get Started →
           </button>
@@ -165,12 +171,8 @@ export default function App() {
             <button
               onClick={() => setScreen("login")}
               style={{
-                background: "none",
-                border: "none",
-                color: "#888",
-                cursor: "pointer",
-                fontSize: "13px",
-                fontFamily: "inherit",
+                background: "none", border: "none", color: "#888",
+                cursor: "pointer", fontSize: "13px", fontFamily: "inherit",
               }}
             >
               Already have an account? <strong style={{ color: "#1a1a1a" }}>Log in</strong>
@@ -182,15 +184,10 @@ export default function App() {
     );
   }
 
-  if (screen === "setup") {
-    return <PinPad mode="setup" onSuccess={handleSetup} error={authError} />;
-  }
+  if (screen === "setup") return <PinPad mode="setup" onSuccess={handleSetup} error={authError} />;
+  if (screen === "login") return <PinPad mode="login" onSuccess={handleLogin} error={authError} />;
 
-  if (screen === "login") {
-    return <PinPad mode="login" onSuccess={handleLogin} error={authError} />;
-  }
-
-  // --- MAIN APP ---
+  // ── Main App ──────────────────────────────────────────────────────────────
   return (
     <div className="app-shell">
       <Header
@@ -200,7 +197,6 @@ export default function App() {
         onLock={handleLock}
       />
 
-      {/* Tabs */}
       <div className="tabs">
         {["journal", "mood"].map((t) => (
           <button
@@ -214,7 +210,6 @@ export default function App() {
       </div>
 
       <div className="split-layout">
-        {/* Left panel */}
         <div className="panel-left">
           {activeTab === "journal" && (
             <>
@@ -226,11 +221,14 @@ export default function App() {
           {activeTab === "mood" && <MoodGraph entries={entries} />}
         </div>
 
-        {/* Right panel */}
-        <AiChat />
+        <AiChat
+          chatCount={chatCount}
+          freeLimit={freeLimit}
+          hasApiKey={hasApiKey}
+          isOwner={isOwner}
+        />
       </div>
 
-      {/* On This Day Modal */}
       {showOTD && <OnThisDayModal entries={onThisDay} onClose={() => setShowOTD(false)} />}
     </div>
   );
