@@ -3,6 +3,9 @@ import {
   hasToken, clearToken,
   getEntries, createEntry, deleteEntry,
   register, login, getMe,
+  createChatSession,
+  addTag, removeTag,
+  getStoredSessionId, storeSessionId, clearSessionId,
 } from "./api.js";
 
 import PinPad from "./components/PinPad.jsx";
@@ -12,6 +15,8 @@ import EntryList from "./components/EntryList.jsx";
 import MoodGraph from "./components/MoodGraph.jsx";
 import AiChat from "./components/AiChat.jsx";
 import OnThisDayModal from "./components/OnThisDayModal.jsx";
+import ChatHistoryDrawer from "./components/ChatHistoryDrawer.jsx";
+import ProfileModal from "./components/ProfileModal.jsx";
 
 const FEATURES = [
   ["📝", "Capture thoughts", "Write anything, any time. Timestamped and private."],
@@ -27,14 +32,20 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("journal");
   const [onThisDay, setOnThisDay] = useState([]);
   const [showOTD, setShowOTD] = useState(false);
+  const [showChats, setShowChats] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [authError, setAuthError] = useState("");
 
-  // User / AI state
+  // User / AI / session state
+  const [username, setUsername] = useState("");
   const [chatCount, setChatCount] = useState(0);
   const [freeLimit, setFreeLimit] = useState(10);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [pinLength, setPinLength] = useState(4);
+  const [customTags, setCustomTags] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
 
   useEffect(() => {
     if (hasToken()) {
@@ -46,13 +57,28 @@ export default function App() {
 
   const loadApp = async () => {
     try {
+      // Reuse the existing session on page reload — only create a new one on fresh login
+      let sid = getStoredSessionId();
+
       const [data, me] = await Promise.all([getEntries(), getMe()]);
+
+      // If no stored session exists yet, create one now (first ever load after registration)
+      if (!sid) {
+        const session = await createChatSession();
+        sid = session.session_id;
+        storeSessionId(sid);
+      }
+
       setEntries(data || []);
       checkOnThisDay(data || []);
+      setUsername(me.username);
       setChatCount(me.chatCount);
       setFreeLimit(me.freeLimit);
       setHasApiKey(me.hasApiKey);
       setIsOwner(me.isOwner);
+      setPinLength(me.pinLength || 4);
+      setCustomTags(me.customTags || []);
+      setSessionId(sid);
       setScreen("app");
     } catch {
       clearToken();
@@ -74,15 +100,21 @@ export default function App() {
     );
   };
 
-  const handleSetup = async (username, pin) => {
+  const handleSetup = async (u, pin, pLen) => {
     setAuthError("");
-    await register(username, pin);
+    await register(u, pin, pLen);
+    // Fresh login — always create a new session
+    const session = await createChatSession();
+    storeSessionId(session.session_id);
     await loadApp();
   };
 
-  const handleLogin = async (username, pin) => {
+  const handleLogin = async (u, pin) => {
     setAuthError("");
-    await login(username, pin);
+    await login(u, pin);
+    // Fresh login — always create a new session
+    const session = await createChatSession();
+    storeSessionId(session.session_id);
     await loadApp();
   };
 
@@ -110,6 +142,16 @@ export default function App() {
     }
   };
 
+  const handleAddTag = async (tag) => {
+    const result = await addTag(tag);
+    setCustomTags(result.tags);
+  };
+
+  const handleRemoveTag = async (tag) => {
+    const result = await removeTag(tag);
+    setCustomTags(result.tags);
+  };
+
   const handleExport = () => {
     const lines = entries
       .map((e) => {
@@ -130,18 +172,16 @@ export default function App() {
 
   const handleLock = () => {
     clearToken();
+    clearSessionId();
     setEntries([]);
+    setSessionId(null);
     setScreen("login");
   };
 
   // ── Screens ──────────────────────────────────────────────────────────────
 
   if (screen === "loading") {
-    return (
-      <div className="center-screen">
-        <span className="loading-text loading-pulse">Loading...</span>
-      </div>
-    );
+    return <div className="center-screen"><span className="loading-text loading-pulse">Loading...</span></div>;
   }
 
   if (screen === "welcome") {
@@ -164,16 +204,11 @@ export default function App() {
               </div>
             ))}
           </div>
-          <button className="welcome-cta" onClick={() => setScreen("setup")}>
-            Get Started →
-          </button>
+          <button className="welcome-cta" onClick={() => setScreen("setup")}>Get Started →</button>
           <div style={{ marginTop: 8 }}>
             <button
               onClick={() => setScreen("login")}
-              style={{
-                background: "none", border: "none", color: "#888",
-                cursor: "pointer", fontSize: "13px", fontFamily: "inherit",
-              }}
+              style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: "13px", fontFamily: "inherit" }}
             >
               Already have an account? <strong style={{ color: "#1a1a1a" }}>Log in</strong>
             </button>
@@ -195,6 +230,8 @@ export default function App() {
         onShowOTD={() => setShowOTD(true)}
         onExport={handleExport}
         onLock={handleLock}
+        onShowChats={() => setShowChats(true)}
+        onShowProfile={() => setShowProfile(true)}
       />
 
       <div className="tabs">
@@ -213,7 +250,13 @@ export default function App() {
         <div className="panel-left">
           {activeTab === "journal" && (
             <>
-              <EntryForm onSave={handleSaveEntry} saving={saving} />
+              <EntryForm
+                onSave={handleSaveEntry}
+                saving={saving}
+                customTags={customTags}
+                onAddTag={handleAddTag}
+                onRemoveTag={handleRemoveTag}
+              />
               <hr className="divider" />
               <EntryList entries={entries} onDelete={handleDeleteEntry} />
             </>
@@ -222,6 +265,7 @@ export default function App() {
         </div>
 
         <AiChat
+          sessionId={sessionId}
           chatCount={chatCount}
           freeLimit={freeLimit}
           hasApiKey={hasApiKey}
@@ -230,6 +274,14 @@ export default function App() {
       </div>
 
       {showOTD && <OnThisDayModal entries={onThisDay} onClose={() => setShowOTD(false)} />}
+      {showChats && <ChatHistoryDrawer currentSessionId={sessionId} onClose={() => setShowChats(false)} />}
+      {showProfile && (
+        <ProfileModal
+          username={username}
+          pinLength={pinLength}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
     </div>
   );
 }

@@ -18,7 +18,7 @@ const auth = (req, res, next) => {
 };
 
 router.post("/chat", auth, async (req, res) => {
-  const { messages } = req.body;
+  const { messages, session_id } = req.body;
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "messages array is required" });
   }
@@ -26,7 +26,7 @@ router.post("/chat", auth, async (req, res) => {
   const username = req.user.username;
   const isOwner = username === OWNER_USERNAME;
 
-  // Fetch user record (chat_count, user_api_key)
+  // Fetch user record
   const { data: userRecord } = await supabase
     .from("users")
     .select("chat_count, user_api_key")
@@ -36,28 +36,19 @@ router.post("/chat", auth, async (req, res) => {
   const chatCount = userRecord?.chat_count || 0;
   const userApiKey = userRecord?.user_api_key || null;
 
-  // ── Determine which API key to use ──────────────────────────────────────
+  // Determine which API key to use
   let resolvedApiKey;
-
   if (isOwner) {
-    // Owner always uses their personal key (or Ollama if AI_PROVIDER=ollama)
     resolvedApiKey = process.env.GOOGLE_API_KEY_OWNER;
   } else if (userApiKey) {
-    // User supplied their own key → unlimited
     resolvedApiKey = userApiKey;
   } else if (chatCount < FREE_LIMIT) {
-    // Under free trial limit → use shared trial key
     resolvedApiKey = process.env.GOOGLE_API_KEY_TRIAL;
   } else {
-    // Free trial exhausted, no personal key
-    return res.status(402).json({
-      error: "free_limit_reached",
-      chatCount,
-      freeLimit: FREE_LIMIT,
-    });
+    return res.status(402).json({ error: "free_limit_reached", chatCount, freeLimit: FREE_LIMIT });
   }
 
-  // ── Build journal context from user's entries ────────────────────────────
+  // Build journal context
   const { data: entries } = await supabase
     .from("entries")
     .select("text, activity, mood, mood_label, created_at")
@@ -76,11 +67,31 @@ router.post("/chat", auth, async (req, res) => {
           .join("\n\n")
       : "No entries yet.";
 
-  // ── Call AI ──────────────────────────────────────────────────────────────
+  // Call AI
   try {
+    const lastUserMsg = messages[messages.length - 1].content;
     const reply = await aiChat(messages, journalContext, resolvedApiKey);
 
-    // Increment chat count for non-owner users using the trial key
+    // Persist messages to chat session
+    if (session_id) {
+      const { data: sessionData } = await supabase
+        .from("chat_sessions")
+        .select("title")
+        .eq("id", session_id)
+        .single();
+
+      if (sessionData && !sessionData.title) {
+        const title = lastUserMsg.length > 50 ? lastUserMsg.slice(0, 47) + "..." : lastUserMsg;
+        await supabase.from("chat_sessions").update({ title }).eq("id", session_id);
+      }
+
+      await supabase.from("chat_messages").insert([
+        { session_id, role: "user", content: lastUserMsg },
+        { session_id, role: "assistant", content: reply },
+      ]);
+    }
+
+    // Increment chat count for trial users
     if (!isOwner && !userApiKey) {
       await supabase
         .from("users")

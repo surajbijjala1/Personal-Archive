@@ -10,7 +10,13 @@ const SUGGESTIONS = [
   "Show me a time I felt strong",
 ];
 
-export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiKey: initialHasApiKey, isOwner }) {
+export default function AiChat({
+  sessionId,
+  chatCount: initialChatCount,
+  freeLimit,
+  hasApiKey: initialHasApiKey,
+  isOwner,
+}) {
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,17 +25,9 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
   const [showKeyModal, setShowKeyModal] = useState(false);
   const endRef = useRef(null);
 
-  useEffect(() => {
-    setChatCount(initialChatCount || 0);
-  }, [initialChatCount]);
-
-  useEffect(() => {
-    setHasApiKey(initialHasApiKey || false);
-  }, [initialHasApiKey]);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs]);
+  useEffect(() => { setChatCount(initialChatCount || 0); }, [initialChatCount]);
+  useEffect(() => { setHasApiKey(initialHasApiKey || false); }, [initialHasApiKey]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
   const freeRemaining = isOwner || hasApiKey ? null : Math.max(0, freeLimit - chatCount);
 
@@ -43,12 +41,11 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
     setLoading(true);
 
     try {
-      const data = await sendChat(newMsgs);
+      const data = await sendChat(newMsgs, sessionId);
 
       if (data.error === "free_limit_reached") {
+        setMsgs(msgs); // revert user message
         setShowKeyModal(true);
-        // Remove the user message that caused this so they can retry
-        setMsgs(msgs);
         setLoading(false);
         return;
       }
@@ -56,11 +53,8 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
       setMsgs([...newMsgs, { role: "assistant", content: data.reply }]);
       if (data.chatCount !== undefined) setChatCount(data.chatCount);
       if (data.hasApiKey !== undefined) setHasApiKey(data.hasApiKey);
-    } catch (e) {
-      setMsgs([
-        ...newMsgs,
-        { role: "assistant", content: "Connection failed. Please try again." },
-      ]);
+    } catch {
+      setMsgs([...newMsgs, { role: "assistant", content: "Connection failed. Please try again." }]);
     }
 
     setLoading(false);
@@ -72,70 +66,28 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
   };
 
   return (
-    <div
-      style={{
-        flex: 1,
-        padding: "var(--space-lg)",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
+    <div style={{ flex: 1, padding: "var(--space-lg)", display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 10, flexWrap: "wrap" }}>
         <div className="panel-title">Your AI Companion</div>
-        {/* Status badge */}
         {isOwner ? (
-          <span
-            style={{
-              fontSize: "11.5px",
-              color: "#4a4",
-              background: "#4a422",
-              borderRadius: "var(--radius-sm)",
-              padding: "3px 9px",
-              fontWeight: 500,
-            }}
-          >
-            ✓ Owner — unlimited
-          </span>
+          <span className="ai-badge ai-badge--owner">✓ Owner — unlimited</span>
         ) : hasApiKey ? (
-          <span
-            style={{
-              fontSize: "11.5px",
-              color: "#4a4",
-              background: "#4a422",
-              borderRadius: "var(--radius-sm)",
-              padding: "3px 9px",
-              fontWeight: 500,
-            }}
-          >
-            ✓ Your key active
-          </span>
+          <span className="ai-badge ai-badge--key">✓ Your key active</span>
         ) : freeRemaining !== null ? (
-          <span
-            style={{
-              fontSize: "11.5px",
-              color: "var(--text-tertiary)",
-              background: "var(--bg-tertiary)",
-              borderRadius: "var(--radius-sm)",
-              padding: "3px 9px",
-              fontWeight: 500,
-            }}
-          >
+          <span className="ai-badge ai-badge--trial">
             {freeRemaining > 0 ? `${freeRemaining} free messages left` : "Free limit reached"}
           </span>
         ) : null}
       </div>
       <div className="panel-sub">Powered entirely by your own words</div>
 
-      {/* Chat messages */}
+      {/* Messages */}
       <div className="chat-box">
         {msgs.length === 0 && (
           <div className="chat-welcome">
             <div>👋 I only know what you've written. The more you share, the more I can reflect back to you.</div>
-            <div style={{ marginTop: 10, fontSize: "12.5px", color: "var(--text-tertiary)" }}>
-              Try asking:
-            </div>
+            <div style={{ marginTop: 10, fontSize: "12.5px", color: "var(--text-tertiary)" }}>Try asking:</div>
             {SUGGESTIONS.map((s) => (
               <button key={s} className="chat-suggestion" onClick={() => send(s)}>
                 💬 "{s}"
@@ -161,11 +113,10 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
             </div>
           </div>
         )}
-
         <div ref={endRef} />
       </div>
 
-      {/* Input row */}
+      {/* Input */}
       <div className="chat-input-row">
         <input
           className="chat-input"
@@ -180,10 +131,7 @@ export default function AiChat({ chatCount: initialChatCount, freeLimit, hasApiK
         </button>
       </div>
 
-      {/* BYOK Modal */}
-      {showKeyModal && (
-        <ApiKeyModal onSaved={handleKeySaved} onDismiss={() => setShowKeyModal(false)} />
-      )}
+      {showKeyModal && <ApiKeyModal onSaved={handleKeySaved} onDismiss={() => setShowKeyModal(false)} />}
     </div>
   );
 }

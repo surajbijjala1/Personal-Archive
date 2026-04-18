@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const ACTIVITIES = [
   { icon: "🧘", label: "Sitting alone" },
@@ -13,10 +13,14 @@ const ACTIVITIES = [
   { icon: "✏️", label: "Other" },
 ];
 
-export default function EntryForm({ onSave, saving }) {
+export default function EntryForm({ onSave, saving, customTags = [], onAddTag, onRemoveTag }) {
   const [thought, setThought] = useState("");
   const [activity, setActivity] = useState(null);
   const [customAct, setCustomAct] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const [tagError, setTagError] = useState("");
+  const newTagRef = useRef(null);
 
   const getActivityLabel = () => {
     if (!activity) return null;
@@ -31,6 +35,27 @@ export default function EntryForm({ onSave, saving }) {
     setThought("");
     setActivity(null);
     setCustomAct("");
+  };
+
+  const handleAddTag = async () => {
+    const tag = newTag.trim();
+    if (!tag) return;
+    if (tag.length > 30) { setTagError("Max 30 characters"); return; }
+    setTagError("");
+    try {
+      await onAddTag(tag);
+      setNewTag("");
+      setAddingTag(false);
+    } catch (e) {
+      setTagError(e.message || "Failed to add tag");
+    }
+  };
+
+  const startAddTag = () => {
+    setAddingTag(true);
+    setNewTag("");
+    setTagError("");
+    setTimeout(() => newTagRef.current?.focus(), 50);
   };
 
   return (
@@ -50,6 +75,7 @@ export default function EntryForm({ onSave, saving }) {
 
       <div className="activity-label">Where were you when this came to you?</div>
       <div className="activity-grid">
+        {/* Built-in activity chips */}
         {ACTIVITIES.map((a) => (
           <button
             key={a.label}
@@ -59,7 +85,52 @@ export default function EntryForm({ onSave, saving }) {
             {a.icon} {a.label}
           </button>
         ))}
+
+        {/* Custom tag chips */}
+        {customTags.map((tag) => (
+          <div key={tag} className="custom-tag-wrapper">
+            <button
+              className={`activity-chip custom-tag-chip ${activity === tag ? "activity-chip--selected" : ""}`}
+              onClick={() => setActivity(activity === tag ? null : tag)}
+            >
+              🏷 {tag}
+            </button>
+            <button
+              className="custom-tag-remove"
+              title={`Remove "${tag}"`}
+              onClick={(e) => { e.stopPropagation(); onRemoveTag(tag); }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+
+        {/* Add tag button / inline input */}
+        {addingTag ? (
+          <div className="add-tag-row">
+            <input
+              ref={newTagRef}
+              className="add-tag-input"
+              placeholder="e.g. Swimming"
+              value={newTag}
+              maxLength={30}
+              onChange={(e) => { setNewTag(e.target.value); setTagError(""); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddTag();
+                if (e.key === "Escape") { setAddingTag(false); setNewTag(""); }
+              }}
+            />
+            <button className="add-tag-save" onClick={handleAddTag}>Add</button>
+            <button className="add-tag-cancel" onClick={() => { setAddingTag(false); setNewTag(""); }}>✕</button>
+          </div>
+        ) : (
+          <button className="activity-chip add-tag-btn" onClick={startAddTag}>
+            + Add tag
+          </button>
+        )}
       </div>
+
+      {tagError && <div className="tag-error">{tagError}</div>}
 
       {activity === "Other" && (
         <input

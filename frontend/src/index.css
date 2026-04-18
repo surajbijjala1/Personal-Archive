@@ -897,3 +897,163 @@ html, body {
   background: var(--border-medium);
   border-radius: 10px;
 }
+
+/* ===== PHASE 3: PIN LENGTH TOGGLE ===== */
+.pin-length-toggle {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 10px 0 4px;
+}
+
+.pin-length-btn {
+  padding: 6px 20px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: 20px;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.pin-length-btn--active {
+  background: var(--text-primary);
+  color: #fff;
+  border-color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ===== PHASE 3: CUSTOM TAGS ===== */
+.custom-tag-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.custom-tag-chip {
+  padding-right: 28px !important; /* room for remove btn */
+  border-style: dashed !important;
+}
+
+.custom-tag-remove {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 3px;
+  line-height: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.custom-tag-remove:hover {
+  color: var(--color-error);
+  background: rgba(220, 68, 68, 0.08);
+}
+
+.add-tag-btn {
+  border-style: dashed !important;
+  color: var(--text-tertiary) !important;
+  background: transparent !important;
+}
+
+.add-tag-btn:hover {
+  color: var(--text-secondary) !important;
+  background: var(--bg-hover) !important;
+}
+
+.add-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.add-tag-input {
+  padding: 5px 10px;
+  border: 1.5px solid var(--border-input);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-family: inherit;
+  outline: none;
+  width: 130px;
+  transition: border-color 0.15s;
+}
+
+.add-tag-input:focus {
+  border-color: var(--text-primary);
+}
+
+.add-tag-save {
+  padding: 5px 12px;
+  background: var(--text-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.add-tag-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px;
+}
+
+.tag-error {
+  font-size: 12px;
+  color: var(--color-error);
+  margin: 4px 0 8px;
+}
+
+/* ===== PHASE 3: AI BADGES ===== */
+.ai-badge {
+  font-size: 11.5px;
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  font-weight: 500;
+}
+
+.ai-badge--owner {
+  color: #3a7;
+  background: rgba(51, 170, 119, 0.1);
+}
+
+.ai-badge--key {
+  color: #3a7;
+  background: rgba(51, 170, 119, 0.1);
+}
+
+.ai-badge--trial {
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+}
+
+/* ===== PHASE 3: CHAT HISTORY MODAL ===== */
+.chat-history-modal::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chat-history-modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-history-modal::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 10px;
+}
+

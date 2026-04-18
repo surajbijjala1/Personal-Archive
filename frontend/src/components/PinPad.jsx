@@ -1,34 +1,67 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { getRememberedUsername, getPinLength } from "../api.js";
 
 const NUMS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
 
 export default function PinPad({ mode, onSuccess, error: externalError }) {
-  // mode: "setup" | "login"
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(getRememberedUsername());
   const [input, setInput] = useState("");
   const [confirm, setConfirm] = useState(null);
   const [err, setErr] = useState("");
-  const [phase, setPhase] = useState("enter"); // "enter" | "confirm" (setup only)
+  const [phase, setPhase] = useState("enter"); // "enter" | "confirm"
   const [loading, setLoading] = useState(false);
+  const [pinLength, setPinLength] = useState(4); // 4 or 6
+  const [fetchingPinLen, setFetchingPinLen] = useState(false);
 
   const displayError = err || externalError || "";
 
-  const press = (v) => {
-    if (v === "") return;
-    if (v === "⌫") {
-      setInput((p) => p.slice(0, -1));
-      setErr("");
+  // On login mode: fetch PIN length when username settles (debounced)
+  useEffect(() => {
+    if (mode !== "login" || !username.trim()) {
+      setPinLength(4);
       return;
     }
-    if (input.length >= 4) return;
+    const timer = setTimeout(async () => {
+      setFetchingPinLen(true);
+      const len = await getPinLength(username.trim());
+      setPinLength(len);
+      setInput(""); // reset dots if length changed
+      setFetchingPinLen(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [username, mode]);
 
-    const next = input + v;
-    setInput(next);
+  const press = useCallback(
+    (v) => {
+      if (loading) return;
+      if (v === "") return;
+      if (v === "⌫") {
+        setInput((p) => p.slice(0, -1));
+        setErr("");
+        return;
+      }
+      if (input.length >= pinLength) return;
 
-    if (next.length === 4) {
-      setTimeout(() => handleComplete(next), 150);
-    }
-  };
+      const next = input + v;
+      setInput(next);
+
+      if (next.length === pinLength) {
+        setTimeout(() => handleComplete(next), 150);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [input, pinLength, loading]
+  );
+
+  // Keyboard support
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key >= "0" && e.key <= "9") press(e.key);
+      if (e.key === "Backspace") press("⌫");
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [press]);
 
   const handleComplete = async (pin) => {
     if (!username.trim()) {
@@ -46,7 +79,7 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
         if (pin === confirm) {
           setLoading(true);
           try {
-            await onSuccess(username.trim(), pin);
+            await onSuccess(username.trim(), pin, pinLength);
           } catch (e) {
             setErr(e.message || "Setup failed");
             setInput("");
@@ -62,7 +95,6 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
         }
       }
     } else {
-      // login
       setLoading(true);
       try {
         await onSuccess(username.trim(), pin);
@@ -76,9 +108,10 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
 
   const getSubtitle = () => {
     if (mode === "setup") {
-      return phase === "confirm" ? "Confirm your 4-digit PIN" : "Create a 4-digit PIN";
+      if (phase === "confirm") return `Confirm your ${pinLength}-digit PIN`;
+      return `Create a ${pinLength}-digit PIN`;
     }
-    return "Enter your PIN to unlock";
+    return fetchingPinLen ? "Checking account..." : "Enter your PIN to unlock";
   };
 
   return (
@@ -95,17 +128,35 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
           type="text"
           placeholder="Enter username"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => { setUsername(e.target.value); setErr(""); }}
           disabled={loading || (mode === "setup" && phase === "confirm")}
-          autoFocus
+          autoFocus={!username}
         />
+
+        {/* PIN length toggle — setup mode, first phase only */}
+        {mode === "setup" && phase === "enter" && (
+          <div className="pin-length-toggle">
+            <button
+              className={`pin-length-btn ${pinLength === 4 ? "pin-length-btn--active" : ""}`}
+              onClick={() => { setPinLength(4); setInput(""); }}
+            >
+              4-digit
+            </button>
+            <button
+              className={`pin-length-btn ${pinLength === 6 ? "pin-length-btn--active" : ""}`}
+              onClick={() => { setPinLength(6); setInput(""); }}
+            >
+              6-digit
+            </button>
+          </div>
+        )}
 
         <div className="pin-subtitle" style={{ marginBottom: 12 }}>
           {getSubtitle()}
         </div>
 
         <div className="pin-dots">
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: pinLength }).map((_, i) => (
             <div
               key={i}
               className={`pin-dot ${i < input.length ? "pin-dot--filled" : "pin-dot--empty"}`}
@@ -135,14 +186,9 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
             <button
               onClick={() => window.location.reload()}
               style={{
-                background: "none",
-                border: "none",
-                color: "#1a1a1a",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontSize: "12px",
-                padding: 0,
-                fontFamily: "inherit",
+                background: "none", border: "none", color: "#1a1a1a",
+                cursor: "pointer", fontWeight: 600, fontSize: "12px",
+                padding: 0, fontFamily: "inherit",
               }}
             >
               Create one

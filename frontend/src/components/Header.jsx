@@ -1,4 +1,4 @@
-export default function Header({ onThisDayCount, onShowOTD, onExport, onLock }) {
+export default function Header({ onThisDayCount, onShowOTD, onExport, onLock, onShowChats, onShowProfile }) {
   return (
     <div className="header">
       <span className="header-logo">🌱 My Inner Archive</span>
@@ -8,10 +8,16 @@ export default function Header({ onThisDayCount, onShowOTD, onExport, onLock }) 
             📅 On This Day
           </button>
         )}
-        <button className="header-btn" onClick={onExport}>
+        <button className="header-btn" onClick={onShowChats} title="Chat history">
+          💬 Chats
+        </button>
+        <button className="header-btn" onClick={onExport} title="Export entries">
           ⬇ Export
         </button>
-        <button className="header-btn" onClick={onLock}>
+        <button className="header-btn" onClick={onShowProfile} title="Profile & settings">
+          👤 Profile
+        </button>
+        <button className="header-btn" onClick={onLock} title="Lock session">
           🔒 Lock
         </button>
       </div>

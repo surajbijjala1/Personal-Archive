@@ -6,6 +6,16 @@ export function setToken(token) { localStorage.setItem("arc_token", token); }
 export function clearToken() { localStorage.removeItem("arc_token"); }
 export function hasToken() { return !!localStorage.getItem("arc_token"); }
 
+// ─── Username memory ─────────────────────────────────────────────────────────
+export function getRememberedUsername() { return localStorage.getItem("arc_username") || ""; }
+export function rememberUsername(u) { localStorage.setItem("arc_username", u); }
+
+// ─── Session memory ──────────────────────────────────────────────────────────
+export function getStoredSessionId() { return localStorage.getItem("arc_session_id") || null; }
+export function storeSessionId(id) { localStorage.setItem("arc_session_id", id); }
+export function clearSessionId() { localStorage.removeItem("arc_session_id"); }
+
+
 // ─── Authenticated fetch helper ──────────────────────────────────────────────
 async function authFetch(path, options = {}) {
   const token = getToken();
@@ -18,11 +28,8 @@ async function authFetch(path, options = {}) {
     },
   });
 
-  // For 402 (free limit reached), return the body as a resolved value
-  // so callers can inspect the error type without crashing
-  if (res.status === 402) {
-    return res.json();
-  }
+  // 402 free_limit_reached — return as resolved value, not thrown
+  if (res.status === 402) return res.json();
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
@@ -33,12 +40,13 @@ async function authFetch(path, options = {}) {
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
-export async function register(username, pin) {
+export async function register(username, pin, pinLength = 4) {
   const data = await authFetch("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, pin }),
+    body: JSON.stringify({ username, pin, pin_length: pinLength }),
   });
   setToken(data.token);
+  rememberUsername(username);
   return data;
 }
 
@@ -48,13 +56,30 @@ export async function login(username, pin) {
     body: JSON.stringify({ username, pin }),
   });
   setToken(data.token);
+  rememberUsername(username);
   return data;
 }
 
-// ─── Entries ─────────────────────────────────────────────────────────────────
-export async function getEntries() {
-  return authFetch("/entries");
+export async function getPinLength(username) {
+  if (!username) return 4;
+  try {
+    const data = await fetch(`${API_URL}/auth/pin-length?username=${encodeURIComponent(username)}`);
+    const json = await data.json();
+    return json.pin_length || 4;
+  } catch {
+    return 4;
+  }
 }
+
+export async function changePin(currentPin, newPin) {
+  return authFetch("/auth/change-pin", {
+    method: "POST",
+    body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
+  });
+}
+
+// ─── Entries ─────────────────────────────────────────────────────────────────
+export async function getEntries() { return authFetch("/entries"); }
 
 export async function createEntry(text, activity) {
   return authFetch("/entries", {
@@ -68,9 +93,7 @@ export async function deleteEntry(id) {
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
-export async function getMe() {
-  return authFetch("/user/me");
-}
+export async function getMe() { return authFetch("/user/me"); }
 
 export async function saveApiKey(apiKey) {
   return authFetch("/user/api-key", {
@@ -79,10 +102,34 @@ export async function saveApiKey(apiKey) {
   });
 }
 
+export async function addTag(tag) {
+  return authFetch("/user/tags", {
+    method: "POST",
+    body: JSON.stringify({ tag }),
+  });
+}
+
+export async function removeTag(tag) {
+  return authFetch(`/user/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
+}
+
 // ─── AI Chat ──────────────────────────────────────────────────────────────────
-export async function sendChat(messages) {
+export async function sendChat(messages, sessionId) {
   return authFetch("/ai/chat", {
     method: "POST",
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, session_id: sessionId }),
   });
+}
+
+// ─── Chat Sessions ────────────────────────────────────────────────────────────
+export async function createChatSession() {
+  return authFetch("/chats/session", { method: "POST" });
+}
+
+export async function getChatSessions() {
+  return authFetch("/chats/sessions");
+}
+
+export async function getChatMessages(sessionId) {
+  return authFetch(`/chats/sessions/${sessionId}/messages`);
 }
