@@ -81,10 +81,10 @@ export async function changePin(currentPin, newPin) {
 // ─── Entries ─────────────────────────────────────────────────────────────────
 export async function getEntries() { return authFetch("/entries"); }
 
-export async function createEntry(text, activity) {
+export async function createEntry(text, activity, moodUser) {
   return authFetch("/entries", {
     method: "POST",
-    body: JSON.stringify({ text, activity }),
+    body: JSON.stringify({ text, activity, mood_user: moodUser ?? null }),
   });
 }
 

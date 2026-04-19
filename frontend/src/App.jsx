@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   hasToken, clearToken,
   getEntries, createEntry, deleteEntry,
@@ -46,6 +46,39 @@ export default function App() {
   const [pinLength, setPinLength] = useState(4);
   const [customTags, setCustomTags] = useState([]);
   const [sessionId, setSessionId] = useState(null);
+
+  // Resizable panel state
+  const [panelWidth, setPanelWidth] = useState(() =>
+    parseFloat(localStorage.getItem("arc_panel_width")) || 45
+  );
+  const isDragging = useRef(false);
+  const panelWidthRef = useRef(panelWidth);
+  const splitRef = useRef(null);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!isDragging.current || !splitRef.current) return;
+      const rect = splitRef.current.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(70, Math.max(25, pct));
+      setPanelWidth(clamped);
+      panelWidthRef.current = clamped;
+    };
+    const onUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        localStorage.setItem("arc_panel_width", panelWidthRef.current);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   useEffect(() => {
     if (hasToken()) {
@@ -118,10 +151,10 @@ export default function App() {
     await loadApp();
   };
 
-  const handleSaveEntry = async (text, activity) => {
+  const handleSaveEntry = async (text, activity, moodUser) => {
     setSaving(true);
     try {
-      const entry = await createEntry(text, activity);
+      const entry = await createEntry(text, activity, moodUser);
       const updated = [entry, ...entries];
       setEntries(updated);
       checkOnThisDay(updated);
@@ -246,8 +279,12 @@ export default function App() {
         ))}
       </div>
 
-      <div className="split-layout">
-        <div className="panel-left">
+      <div
+        className="split-layout"
+        ref={splitRef}
+        style={{ display: "flex", overflow: "hidden" }}
+      >
+        <div className="panel-left" style={{ flex: `0 0 ${panelWidth}%`, width: `${panelWidth}%` }}>
           {activeTab === "journal" && (
             <>
               <EntryForm
@@ -263,6 +300,17 @@ export default function App() {
           )}
           {activeTab === "mood" && <MoodGraph entries={entries} />}
         </div>
+
+        {/* Draggable resizer handle */}
+        <div
+          className="panel-resizer"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            isDragging.current = true;
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+          }}
+        />
 
         <AiChat
           sessionId={sessionId}
