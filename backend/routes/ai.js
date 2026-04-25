@@ -70,7 +70,11 @@ router.post("/chat", auth, async (req, res) => {
   // Call AI
   try {
     const lastUserMsg = messages[messages.length - 1].content;
+
+    const start = performance.now();
     const reply = await aiChat(messages, journalContext, resolvedApiKey);
+    const elapsed = (performance.now() - start).toFixed(0);
+    console.log(`[METRIC] Chat | user=${username} | session=${session_id || "none"} | provider=${process.env.AI_PROVIDER || "gemini"} | latency=${elapsed}ms | msgLen=${reply.length}`);
 
     // Persist messages to chat session
     if (session_id) {
@@ -108,7 +112,7 @@ router.post("/chat", auth, async (req, res) => {
       hasApiKey: !!userApiKey,
     });
   } catch (e) {
-    console.error("AI chat error:", e.message);
+    console.error(`[ERROR] Chat | user=${username} |`, e.message);
     return res.status(500).json({ error: "AI request failed. Please try again." });
   }
 });

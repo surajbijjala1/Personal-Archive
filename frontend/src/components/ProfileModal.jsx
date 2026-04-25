@@ -35,7 +35,7 @@ function MiniPinPad({ value, onChange, pinLength, disabled }) {
   );
 }
 
-export default function ProfileModal({ username, pinLength: initialPinLength, onClose }) {
+export default function ProfileModal({ username, pinLength: initialPinLength, onClose, onSignOut }) {
   const [step, setStep] = useState("menu"); // "menu" | "change-current" | "change-new" | "change-confirm" | "success"
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -139,6 +139,14 @@ export default function ProfileModal({ username, pinLength: initialPinLength, on
               onClick={() => setStep("change-current")}
             >
               Change PIN
+            </button>
+
+            <button
+              className="signout-btn"
+              style={{ width: "100%", marginTop: 12 }}
+              onClick={onSignOut}
+            >
+              🚪 Sign Out
             </button>
           </div>
         )}

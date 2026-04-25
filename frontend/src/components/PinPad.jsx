@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { getRememberedUsername, getPinLength } from "../api.js";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getRememberedUsername, getPinLength, checkUsername } from "../api.js";
 
 const NUMS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
 
@@ -12,6 +12,10 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
   const [loading, setLoading] = useState(false);
   const [pinLength, setPinLength] = useState(4); // 4 or 6
   const [fetchingPinLen, setFetchingPinLen] = useState(false);
+
+  // Username availability state (setup mode only)
+  const [usernameStatus, setUsernameStatus] = useState(null); // null | "checking" | "available" | "taken"
+  const checkTimer = useRef(null);
 
   const displayError = err || externalError || "";
 
@@ -29,6 +33,31 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
       setFetchingPinLen(false);
     }, 500);
     return () => clearTimeout(timer);
+  }, [username, mode]);
+
+  // On setup mode: check username availability (debounced)
+  useEffect(() => {
+    if (mode !== "setup") {
+      setUsernameStatus(null);
+      return;
+    }
+
+    if (!username.trim() || username.trim().length < 2) {
+      setUsernameStatus(null);
+      return;
+    }
+
+    setUsernameStatus("checking");
+
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    checkTimer.current = setTimeout(async () => {
+      const result = await checkUsername(username.trim());
+      setUsernameStatus(result.available ? "available" : "taken");
+    }, 600);
+
+    return () => {
+      if (checkTimer.current) clearTimeout(checkTimer.current);
+    };
   }, [username, mode]);
 
   const press = useCallback(
@@ -66,6 +95,13 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
   const handleComplete = async (pin) => {
     if (!username.trim()) {
       setErr("Please enter a username first.");
+      setInput("");
+      return;
+    }
+
+    // Block registration if username is taken
+    if (mode === "setup" && usernameStatus === "taken") {
+      setErr("Username already exists. Try a different name.");
       setInput("");
       return;
     }
@@ -114,6 +150,22 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
     return fetchingPinLen ? "Checking account..." : "Enter your PIN to unlock";
   };
 
+  // Username status indicator for setup mode
+  const renderUsernameStatus = () => {
+    if (mode !== "setup" || !username.trim() || username.trim().length < 2) return null;
+
+    if (usernameStatus === "checking") {
+      return <span className="username-status username-status--checking">⏳ Checking...</span>;
+    }
+    if (usernameStatus === "available") {
+      return <span className="username-status username-status--available">✓ Available</span>;
+    }
+    if (usernameStatus === "taken") {
+      return <span className="username-status username-status--taken">✕ Already taken</span>;
+    }
+    return null;
+  };
+
   return (
     <div className="center-screen">
       <div className="pin-wrap">
@@ -123,15 +175,18 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
           {mode === "setup" ? "Create your account" : "Welcome back"}
         </div>
 
-        <input
-          className="pin-username-input"
-          type="text"
-          placeholder="Enter username"
-          value={username}
-          onChange={(e) => { setUsername(e.target.value); setErr(""); }}
-          disabled={loading || (mode === "setup" && phase === "confirm")}
-          autoFocus={!username}
-        />
+        <div className="username-field">
+          <input
+            className="pin-username-input"
+            type="text"
+            placeholder="Enter username"
+            value={username}
+            onChange={(e) => { setUsername(e.target.value); setErr(""); }}
+            disabled={loading || (mode === "setup" && phase === "confirm")}
+            autoFocus={!username}
+          />
+          {renderUsernameStatus()}
+        </div>
 
         {/* PIN length toggle — setup mode, first phase only */}
         {mode === "setup" && phase === "enter" && (

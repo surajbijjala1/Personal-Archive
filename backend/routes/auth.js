@@ -30,9 +30,33 @@ router.post("/register", async (req, res) => {
     .from("users")
     .insert({ username: username.trim(), pin_hash: hash, pin_length: pinLen });
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    // Supabase may surface PG error code in error.code OR only in error.message
+    if (
+      error.code === "23505" ||
+      error.message?.includes("duplicate key") ||
+      error.message?.includes("unique constraint")
+    ) {
+      return res.status(409).json({ error: "Username already exists. Try a different name." });
+    }
+    return res.status(400).json({ error: error.message });
+  }
   const token = jwt.sign({ username: username.trim() }, process.env.JWT_SECRET, { expiresIn: "30d" });
   res.json({ token });
+});
+
+// GET /auth/check-username?username=x — check if a username is available (unauthenticated)
+router.get("/check-username", async (req, res) => {
+  const { username } = req.query;
+  if (!username?.trim()) return res.json({ available: false });
+
+  const { data } = await supabase
+    .from("users")
+    .select("username")
+    .eq("username", username.trim())
+    .single();
+
+  res.json({ available: !data });
 });
 
 // POST /auth/login

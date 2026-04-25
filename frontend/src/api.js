@@ -71,6 +71,16 @@ export async function getPinLength(username) {
   }
 }
 
+export async function checkUsername(username) {
+  if (!username?.trim()) return { available: false };
+  try {
+    const res = await fetch(`${API_URL}/auth/check-username?username=${encodeURIComponent(username.trim())}`);
+    return await res.json();
+  } catch {
+    return { available: true }; // fail-open so registration can still attempt
+  }
+}
+
 export async function changePin(currentPin, newPin) {
   return authFetch("/auth/change-pin", {
     method: "POST",
@@ -90,6 +100,10 @@ export async function createEntry(text, activity, moodUser) {
 
 export async function deleteEntry(id) {
   return authFetch(`/entries/${id}`, { method: "DELETE" });
+}
+
+export async function getEntryMood(entryId) {
+  return authFetch(`/entries/${entryId}`);
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

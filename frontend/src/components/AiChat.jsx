@@ -106,10 +106,11 @@ export default function AiChat({
 
         {loading && (
           <div className="chat-bubble-row chat-bubble-row--ai">
-            <div className="chat-bubble--ai">
-              <span className="loading-pulse" style={{ fontSize: "12.5px", color: "var(--text-muted)", fontStyle: "italic" }}>
-                Searching your archive...
-              </span>
+            <div className="chat-bubble--ai chat-fetching">
+              <span className="fetching-dot" />
+              <span className="fetching-dot" />
+              <span className="fetching-dot" />
+              <span className="fetching-text">Fetching</span>
             </div>
           </div>
         )}

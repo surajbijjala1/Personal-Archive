@@ -1269,4 +1269,234 @@ html, body {
   opacity: 1;
 }
 
+/* ===== PHASE 5: CHAT FETCHING ANIMATION ===== */
+.chat-fetching {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 14px;
+}
 
+.fetching-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: fetchBounce 1.2s infinite ease-in-out;
+}
+
+.fetching-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.fetching-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.fetching-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  font-style: italic;
+}
+
+@keyframes fetchBounce {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* ===== PHASE 5: SCORING SPINNER ===== */
+.entry-mood--scoring {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  animation: scoringPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes scoringPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ===== PHASE 5: SIGN OUT BUTTON ===== */
+.signout-btn {
+  padding: 10px;
+  border: 1.5px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-error);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.signout-btn:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
+/* ===== PHASE 5: DESKTOP / MOBILE VISIBILITY ===== */
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: flex;
+}
+
+/* ===== PHASE 5: MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  /* Toggle visibility */
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: flex !important;
+  }
+
+  /* App shell — allow scroll, add bottom padding for nav */
+  .app-shell {
+    padding-bottom: 72px;
+  }
+
+  /* Header compact */
+  .header {
+    padding: 10px 14px;
+  }
+
+  .header-logo {
+    font-size: 15px;
+  }
+
+  .header-btn-text {
+    display: none;
+  }
+
+  .header-btn {
+    padding: 6px 8px;
+    min-width: 0;
+  }
+
+  /* Mobile content area */
+  .mobile-content {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-md);
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1;
+  }
+
+  /* Mobile bottom nav */
+  .mobile-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-light);
+    z-index: 1000;
+    padding: 6px 0;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .mobile-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.15s;
+  }
+
+  .mobile-nav-btn--active {
+    color: var(--text-primary);
+  }
+
+  .mobile-nav-label {
+    font-size: 10px;
+    font-family: inherit;
+    font-weight: 500;
+  }
+
+  /* Entry form tweaks */
+  .entry-textarea {
+    min-height: 80px;
+    font-size: 14px;
+  }
+
+  .activity-chip {
+    font-size: 11.5px;
+    padding: 5px 10px;
+  }
+
+  /* Mood slider */
+  .mood-slider-section {
+    padding: 12px;
+  }
+
+  .mood-slider::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Chat area on mobile */
+  .mobile-content .chat-box {
+    flex: 1;
+    max-height: none;
+  }
+
+  /* Panel title */
+  .panel-title {
+    font-size: 15px;
+  }
+
+  /* Modals — full width on mobile */
+  .modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 85vh;
+  }
+
+  /* Welcome screen */
+  .welcome-card {
+    padding: 24px 20px;
+  }
+}
+
+/* ===== PHASE 5: USERNAME AVAILABILITY CHECK ===== */
+.username-field {
+  position: relative;
+  width: 100%;
+}
+
+.username-status {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  margin-top: 5px;
+  text-align: right;
+  padding-right: 2px;
+}
+
+.username-status--checking {
+  color: #d4a017;
+}
+
+.username-status--available {
+  color: #22a355;
+}
+
+.username-status--taken {
+  color: var(--color-error);
+}

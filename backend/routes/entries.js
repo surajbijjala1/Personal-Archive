@@ -31,7 +31,18 @@ router.get("/", auth, async (req, res) => {
   res.json(data);
 });
 
-// POST /entries — create entry with optional user mood score
+// GET /entries/:id — poll for a single entry's mood data (used by frontend scoring spinner)
+router.get("/:id", auth, async (req, res) => {
+  const { data } = await supabase
+    .from("entries")
+    .select("mood, mood_label, mood_user, mood_user_label")
+    .eq("id", req.params.id)
+    .eq("username", req.user.username)
+    .single();
+  res.json(data || {});
+});
+
+// POST /entries — create entry, return immediately, score mood in background
 router.post("/", auth, async (req, res) => {
   const { text, activity, mood_user } = req.body;
   const username = req.user.username;
@@ -57,36 +68,38 @@ router.post("/", auth, async (req, res) => {
 
   if (error) return res.status(400).json({ error: error.message });
 
-  // 2. Score mood from text via AI
-  try {
-    const apiKey = getMoodApiKey(username);
-    const moodData = await scoreMood(text, apiKey);
-
-    if (moodData) {
-      // If user didn't set a mood, default mood_user to the AI score
-      const finalUserScore = userScore ?? moodData.score;
-      const finalUserLabel = userLabel ?? moodData.label;
-
-      const { data: updated } = await supabase
-        .from("entries")
-        .update({
-          mood: moodData.score,
-          mood_label: moodData.label,
-          mood_user: finalUserScore,
-          mood_user_label: finalUserLabel,
-        })
-        .eq("id", entry.id)
-        .select()
-        .single();
-
-      return res.json(updated);
-    }
-  } catch (e) {
-    console.error("Mood scoring failed:", e.message);
-  }
-
-  // 3. Return entry without AI mood if scoring failed
+  // 2. Return immediately — the UI gets the entry instantly
   res.json(entry);
+
+  // 3. Fire-and-forget: score mood in the background
+  setImmediate(async () => {
+    try {
+      const start = performance.now();
+      const apiKey = getMoodApiKey(username);
+      const moodData = await scoreMood(text, apiKey);
+      const elapsed = (performance.now() - start).toFixed(0);
+
+      console.log(`[METRIC] MoodScore | user=${username} | entry=${entry.id} | provider=${process.env.AI_PROVIDER || "gemini"} | score=${moodData?.score} | latency=${elapsed}ms`);
+
+      if (moodData) {
+        // If user didn't set a mood, default mood_user to the AI score
+        const finalUserScore = userScore ?? moodData.score;
+        const finalUserLabel = userLabel ?? moodData.label;
+
+        await supabase
+          .from("entries")
+          .update({
+            mood: moodData.score,
+            mood_label: moodData.label,
+            mood_user: finalUserScore,
+            mood_user_label: finalUserLabel,
+          })
+          .eq("id", entry.id);
+      }
+    } catch (e) {
+      console.error(`[ERROR] MoodScore | entry=${entry.id} |`, e.message);
+    }
+  });
 });
 
 // DELETE /entries/:id

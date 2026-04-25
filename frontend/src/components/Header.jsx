@@ -5,20 +5,25 @@ export default function Header({ onThisDayCount, onShowOTD, onExport, onLock, on
       <div className="header-actions">
         {onThisDayCount > 0 && (
           <button className="header-btn header-btn--warm" onClick={onShowOTD}>
-            📅 On This Day
+            <span className="header-btn-icon">📅</span>
+            <span className="header-btn-text">On This Day</span>
           </button>
         )}
         <button className="header-btn" onClick={onShowChats} title="Chat history">
-          💬 Chats
+          <span className="header-btn-icon">💬</span>
+          <span className="header-btn-text">Chats</span>
         </button>
         <button className="header-btn" onClick={onExport} title="Export entries">
-          ⬇ Export
+          <span className="header-btn-icon">⬇</span>
+          <span className="header-btn-text">Export</span>
         </button>
         <button className="header-btn" onClick={onShowProfile} title="Profile & settings">
-          👤 Profile
+          <span className="header-btn-icon">👤</span>
+          <span className="header-btn-text">Profile</span>
         </button>
         <button className="header-btn" onClick={onLock} title="Lock session">
-          🔒 Lock
+          <span className="header-btn-icon">🔒</span>
+          <span className="header-btn-text">Lock</span>
         </button>
       </div>
     </div>

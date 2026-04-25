@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   hasToken, clearToken,
   getEntries, createEntry, deleteEntry,
@@ -30,6 +30,7 @@ export default function App() {
   const [screen, setScreen] = useState("loading");
   const [entries, setEntries] = useState([]);
   const [activeTab, setActiveTab] = useState("journal");
+  const [mobileTab, setMobileTab] = useState("journal"); // mobile bottom nav
   const [onThisDay, setOnThisDay] = useState([]);
   const [showOTD, setShowOTD] = useState(false);
   const [showChats, setShowChats] = useState(false);
@@ -58,6 +59,7 @@ export default function App() {
   useEffect(() => {
     const onMove = (e) => {
       if (!isDragging.current || !splitRef.current) return;
+      if (window.innerWidth <= 768) return; // skip on mobile
       const rect = splitRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
       const clamped = Math.min(70, Math.max(25, pct));
@@ -90,12 +92,9 @@ export default function App() {
 
   const loadApp = async () => {
     try {
-      // Reuse the existing session on page reload — only create a new one on fresh login
       let sid = getStoredSessionId();
-
       const [data, me] = await Promise.all([getEntries(), getMe()]);
 
-      // If no stored session exists yet, create one now (first ever load after registration)
       if (!sid) {
         const session = await createChatSession();
         sid = session.session_id;
@@ -136,7 +135,6 @@ export default function App() {
   const handleSetup = async (u, pin, pLen) => {
     setAuthError("");
     await register(u, pin, pLen);
-    // Fresh login — always create a new session
     const session = await createChatSession();
     storeSessionId(session.session_id);
     await loadApp();
@@ -145,7 +143,6 @@ export default function App() {
   const handleLogin = async (u, pin) => {
     setAuthError("");
     await login(u, pin);
-    // Fresh login — always create a new session
     const session = await createChatSession();
     storeSessionId(session.session_id);
     await loadApp();
@@ -163,6 +160,17 @@ export default function App() {
     }
     setSaving(false);
   };
+
+  // Called by EntryList when a poll resolves with AI mood data
+  const handleUpdateEntry = useCallback((id, moodData) => {
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id === id
+          ? { ...e, ...moodData }
+          : e
+      )
+    );
+  }, []);
 
   const handleDeleteEntry = async (id) => {
     try {
@@ -189,8 +197,9 @@ export default function App() {
     const lines = entries
       .map((e) => {
         const act = e.activity ? `\nContext: ${e.activity}` : "";
-        const mood = e.mood ? `\nMood: ${e.mood_label} (${e.mood}/10)` : "";
-        return `[${new Date(e.created_at).toLocaleString()}]${act}${mood}\n${e.text}`;
+        const moodAi = e.mood ? `\nAI Mood: ${e.mood_label} (${e.mood}/10)` : "";
+        const moodU = e.mood_user ? `\nYour Mood: ${e.mood_user_label} (${e.mood_user}/10)` : "";
+        return `[${new Date(e.created_at).toLocaleString()}]${act}${moodU}${moodAi}\n${e.text}`;
       })
       .join("\n\n---\n\n");
     const blob = new Blob(
@@ -209,6 +218,16 @@ export default function App() {
     setEntries([]);
     setSessionId(null);
     setScreen("login");
+  };
+
+  const handleSignOut = () => {
+    clearToken();
+    clearSessionId();
+    localStorage.removeItem("arc_username");
+    setEntries([]);
+    setSessionId(null);
+    setShowProfile(false);
+    setScreen("welcome");
   };
 
   // ── Screens ──────────────────────────────────────────────────────────────
@@ -255,6 +274,33 @@ export default function App() {
   if (screen === "setup") return <PinPad mode="setup" onSuccess={handleSetup} error={authError} />;
   if (screen === "login") return <PinPad mode="login" onSuccess={handleLogin} error={authError} />;
 
+  // ── Determine what to render on mobile ────────────────────────────────────
+  const renderJournal = () => (
+    <>
+      <EntryForm
+        onSave={handleSaveEntry}
+        saving={saving}
+        customTags={customTags}
+        onAddTag={handleAddTag}
+        onRemoveTag={handleRemoveTag}
+      />
+      <hr className="divider" />
+      <EntryList entries={entries} onDelete={handleDeleteEntry} onUpdateEntry={handleUpdateEntry} />
+    </>
+  );
+
+  const renderInsights = () => <MoodGraph entries={entries} />;
+
+  const renderChat = () => (
+    <AiChat
+      sessionId={sessionId}
+      chatCount={chatCount}
+      freeLimit={freeLimit}
+      hasApiKey={hasApiKey}
+      isOwner={isOwner}
+    />
+  );
+
   // ── Main App ──────────────────────────────────────────────────────────────
   return (
     <div className="app-shell">
@@ -267,7 +313,8 @@ export default function App() {
         onShowProfile={() => setShowProfile(true)}
       />
 
-      <div className="tabs">
+      {/* Desktop tabs — hidden on mobile */}
+      <div className="tabs desktop-only">
         {["journal", "mood"].map((t) => (
           <button
             key={t}
@@ -279,29 +326,17 @@ export default function App() {
         ))}
       </div>
 
+      {/* Desktop split layout — hidden on mobile */}
       <div
-        className="split-layout"
+        className="split-layout desktop-only"
         ref={splitRef}
         style={{ display: "flex", overflow: "hidden" }}
       >
         <div className="panel-left" style={{ flex: `0 0 ${panelWidth}%`, width: `${panelWidth}%` }}>
-          {activeTab === "journal" && (
-            <>
-              <EntryForm
-                onSave={handleSaveEntry}
-                saving={saving}
-                customTags={customTags}
-                onAddTag={handleAddTag}
-                onRemoveTag={handleRemoveTag}
-              />
-              <hr className="divider" />
-              <EntryList entries={entries} onDelete={handleDeleteEntry} />
-            </>
-          )}
-          {activeTab === "mood" && <MoodGraph entries={entries} />}
+          {activeTab === "journal" && renderJournal()}
+          {activeTab === "mood" && renderInsights()}
         </div>
 
-        {/* Draggable resizer handle */}
         <div
           className="panel-resizer"
           onMouseDown={(e) => {
@@ -312,13 +347,39 @@ export default function App() {
           }}
         />
 
-        <AiChat
-          sessionId={sessionId}
-          chatCount={chatCount}
-          freeLimit={freeLimit}
-          hasApiKey={hasApiKey}
-          isOwner={isOwner}
-        />
+        {renderChat()}
+      </div>
+
+      {/* Mobile content area — shown only on mobile */}
+      <div className="mobile-content mobile-only">
+        {mobileTab === "journal" && renderJournal()}
+        {mobileTab === "insights" && renderInsights()}
+        {mobileTab === "chat" && renderChat()}
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <div className="mobile-nav mobile-only">
+        <button
+          className={`mobile-nav-btn ${mobileTab === "journal" ? "mobile-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("journal")}
+        >
+          <span>📝</span>
+          <span className="mobile-nav-label">Journal</span>
+        </button>
+        <button
+          className={`mobile-nav-btn ${mobileTab === "insights" ? "mobile-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("insights")}
+        >
+          <span>📈</span>
+          <span className="mobile-nav-label">Insights</span>
+        </button>
+        <button
+          className={`mobile-nav-btn ${mobileTab === "chat" ? "mobile-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("chat")}
+        >
+          <span>💬</span>
+          <span className="mobile-nav-label">Chat</span>
+        </button>
       </div>
 
       {showOTD && <OnThisDayModal entries={onThisDay} onClose={() => setShowOTD(false)} />}
@@ -328,6 +389,7 @@ export default function App() {
           username={username}
           pinLength={pinLength}
           onClose={() => setShowProfile(false)}
+          onSignOut={handleSignOut}
         />
       )}
     </div>
