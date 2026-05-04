@@ -3,7 +3,7 @@ import { getRememberedUsername, getPinLength, checkUsername } from "../api.js";
 
 const NUMS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
 
-export default function PinPad({ mode, onSuccess, error: externalError }) {
+export default function PinPad({ mode, onSuccess, onBack, error: externalError }) {
   const [username, setUsername] = useState(getRememberedUsername());
   const [input, setInput] = useState("");
   const [confirm, setConfirm] = useState(null);
@@ -234,6 +234,22 @@ export default function PinPad({ mode, onSuccess, error: externalError }) {
             </button>
           ))}
         </div>
+
+        {mode === "setup" && onBack && (
+          <div style={{ fontSize: "12px", color: "#aaa", marginTop: 4 }}>
+            Already have an account?{" "}
+            <button
+              onClick={onBack}
+              style={{
+                background: "none", border: "none", color: "#1a1a1a",
+                cursor: "pointer", fontWeight: 600, fontSize: "12px",
+                padding: 0, fontFamily: "inherit",
+              }}
+            >
+              Log in
+            </button>
+          </div>
+        )}
 
         {mode === "login" && (
           <div style={{ fontSize: "12px", color: "#aaa", marginTop: 4 }}>

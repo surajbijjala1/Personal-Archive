@@ -1500,3 +1500,115 @@ html, body {
 .username-status--taken {
   color: var(--color-error);
 }
+
+/* ===== PHASE 6: NEW CHAT BUTTON ===== */
+.new-chat-btn {
+  background: var(--bg-tertiary);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.new-chat-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-medium);
+}
+
+/* ===== PHASE 6: SESSION DELETE BUTTON ===== */
+.session-row:hover .session-delete-btn {
+  opacity: 1;
+}
+
+.session-delete-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  opacity: 0.4;
+  transition: opacity 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.session-delete-btn:hover {
+  opacity: 1;
+  background: var(--bg-secondary);
+}
+
+/* ===== PHASE 6: D3 BUBBLE CHART ANIMATIONS ===== */
+.bubble-svg {
+  overflow: visible;
+  cursor: default;
+}
+
+.bubble-group {
+  animation: bubbleEnter 0.45s ease-out both;
+}
+
+.bubble-circle,
+.bubble-text {
+  animation: bubbleFloat var(--float-dur, 3s) ease-in-out infinite;
+  animation-delay: var(--float-delay, 0s);
+}
+
+@keyframes bubbleEnter {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bubbleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ===== PHASE 6: BUBBLE JAR CONTAINER ===== */
+.bubble-jar {
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.bubble-jar-inner {
+  position: relative;
+  overflow: visible;
+}
+
+/* ===== PHASE 6: BUBBLE INFO CARD (click tooltip) ===== */
+.bubble-info-card {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  animation: infoCardIn 0.2s ease-out;
+  white-space: nowrap;
+}
+
+@keyframes infoCardIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}

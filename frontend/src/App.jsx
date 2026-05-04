@@ -3,7 +3,7 @@ import {
   hasToken, clearToken,
   getEntries, createEntry, deleteEntry,
   register, login, getMe,
-  createChatSession,
+  createChatSession, getChatMessages,
   addTag, removeTag,
   getStoredSessionId, storeSessionId, clearSessionId,
 } from "./api.js";
@@ -30,7 +30,7 @@ export default function App() {
   const [screen, setScreen] = useState("loading");
   const [entries, setEntries] = useState([]);
   const [activeTab, setActiveTab] = useState("journal");
-  const [mobileTab, setMobileTab] = useState("journal"); // mobile bottom nav
+  const [mobileTab, setMobileTab] = useState("journal");
   const [onThisDay, setOnThisDay] = useState([]);
   const [showOTD, setShowOTD] = useState(false);
   const [showChats, setShowChats] = useState(false);
@@ -46,7 +46,10 @@ export default function App() {
   const [isOwner, setIsOwner] = useState(false);
   const [pinLength, setPinLength] = useState(4);
   const [customTags, setCustomTags] = useState([]);
+
+  // Chat state — lifted here so it survives mobile tab switches
   const [sessionId, setSessionId] = useState(null);
+  const [chatMsgs, setChatMsgs] = useState([]);
 
   // Resizable panel state
   const [panelWidth, setPanelWidth] = useState(() =>
@@ -59,7 +62,7 @@ export default function App() {
   useEffect(() => {
     const onMove = (e) => {
       if (!isDragging.current || !splitRef.current) return;
-      if (window.innerWidth <= 768) return; // skip on mobile
+      if (window.innerWidth <= 768) return;
       const rect = splitRef.current.getBoundingClientRect();
       const pct = ((e.clientX - rect.left) / rect.width) * 100;
       const clamped = Math.min(70, Math.max(25, pct));
@@ -92,14 +95,9 @@ export default function App() {
 
   const loadApp = async () => {
     try {
-      let sid = getStoredSessionId();
+      // Restore session ID from localStorage (if any) — but do NOT create a new one
+      const sid = getStoredSessionId();
       const [data, me] = await Promise.all([getEntries(), getMe()]);
-
-      if (!sid) {
-        const session = await createChatSession();
-        sid = session.session_id;
-        storeSessionId(sid);
-      }
 
       setEntries(data || []);
       checkOnThisDay(data || []);
@@ -110,7 +108,21 @@ export default function App() {
       setIsOwner(me.isOwner);
       setPinLength(me.pinLength || 4);
       setCustomTags(me.customTags || []);
-      setSessionId(sid);
+      setSessionId(sid || null);
+
+      // If resuming a session, load its messages
+      if (sid) {
+        try {
+          const msgs = await getChatMessages(sid);
+          setChatMsgs(msgs.map((m) => ({ role: m.role, content: m.content })));
+        } catch {
+          // Session may have been deleted — start fresh
+          setChatMsgs([]);
+          clearSessionId();
+          setSessionId(null);
+        }
+      }
+
       setScreen("app");
     } catch {
       clearToken();
@@ -135,16 +147,14 @@ export default function App() {
   const handleSetup = async (u, pin, pLen) => {
     setAuthError("");
     await register(u, pin, pLen);
-    const session = await createChatSession();
-    storeSessionId(session.session_id);
+    // No session created here — lazy creation on first message
     await loadApp();
   };
 
   const handleLogin = async (u, pin) => {
     setAuthError("");
     await login(u, pin);
-    const session = await createChatSession();
-    storeSessionId(session.session_id);
+    // No session created here — lazy creation on first message
     await loadApp();
   };
 
@@ -161,14 +171,9 @@ export default function App() {
     setSaving(false);
   };
 
-  // Called by EntryList when a poll resolves with AI mood data
   const handleUpdateEntry = useCallback((id, moodData) => {
     setEntries((prev) =>
-      prev.map((e) =>
-        e.id === id
-          ? { ...e, ...moodData }
-          : e
-      )
+      prev.map((e) => (e.id === id ? { ...e, ...moodData } : e))
     );
   }, []);
 
@@ -193,6 +198,28 @@ export default function App() {
     setCustomTags(result.tags);
   };
 
+  // ── Chat handlers ─────────────────────────────────────────────────────────
+
+  const handleNewChat = () => {
+    setChatMsgs([]);
+    setSessionId(null);
+    clearSessionId();
+  };
+
+  const handleResumeSession = async (session) => {
+    try {
+      const messages = await getChatMessages(session.id);
+      setChatMsgs(messages.map((m) => ({ role: m.role, content: m.content })));
+      setSessionId(session.id);
+      storeSessionId(session.id);
+      setShowChats(false);
+    } catch {
+      alert("Failed to load session");
+    }
+  };
+
+  // ── Export / Lock / Sign Out ───────────────────────────────────────────────
+
   const handleExport = () => {
     const lines = entries
       .map((e) => {
@@ -216,6 +243,7 @@ export default function App() {
     clearToken();
     clearSessionId();
     setEntries([]);
+    setChatMsgs([]);
     setSessionId(null);
     setScreen("login");
   };
@@ -225,6 +253,7 @@ export default function App() {
     clearSessionId();
     localStorage.removeItem("arc_username");
     setEntries([]);
+    setChatMsgs([]);
     setSessionId(null);
     setShowProfile(false);
     setScreen("welcome");
@@ -271,10 +300,12 @@ export default function App() {
     );
   }
 
-  if (screen === "setup") return <PinPad mode="setup" onSuccess={handleSetup} error={authError} />;
+  if (screen === "setup") {
+    return <PinPad mode="setup" onSuccess={handleSetup} onBack={() => setScreen("login")} error={authError} />;
+  }
   if (screen === "login") return <PinPad mode="login" onSuccess={handleLogin} error={authError} />;
 
-  // ── Determine what to render on mobile ────────────────────────────────────
+  // ── Render helpers ────────────────────────────────────────────────────────
   const renderJournal = () => (
     <>
       <EntryForm
@@ -294,6 +325,10 @@ export default function App() {
   const renderChat = () => (
     <AiChat
       sessionId={sessionId}
+      setSessionId={setSessionId}
+      msgs={chatMsgs}
+      setMsgs={setChatMsgs}
+      onNewChat={handleNewChat}
       chatCount={chatCount}
       freeLimit={freeLimit}
       hasApiKey={hasApiKey}
@@ -313,7 +348,7 @@ export default function App() {
         onShowProfile={() => setShowProfile(true)}
       />
 
-      {/* Desktop tabs — hidden on mobile */}
+      {/* Desktop tabs */}
       <div className="tabs desktop-only">
         {["journal", "mood"].map((t) => (
           <button
@@ -326,7 +361,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* Desktop split layout — hidden on mobile */}
+      {/* Desktop split layout */}
       <div
         className="split-layout desktop-only"
         ref={splitRef}
@@ -350,7 +385,7 @@ export default function App() {
         {renderChat()}
       </div>
 
-      {/* Mobile content area — shown only on mobile */}
+      {/* Mobile content area */}
       <div className="mobile-content mobile-only">
         {mobileTab === "journal" && renderJournal()}
         {mobileTab === "insights" && renderInsights()}
@@ -359,31 +394,30 @@ export default function App() {
 
       {/* Mobile bottom navigation */}
       <div className="mobile-nav mobile-only">
-        <button
-          className={`mobile-nav-btn ${mobileTab === "journal" ? "mobile-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("journal")}
-        >
-          <span>📝</span>
-          <span className="mobile-nav-label">Journal</span>
-        </button>
-        <button
-          className={`mobile-nav-btn ${mobileTab === "insights" ? "mobile-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("insights")}
-        >
-          <span>📈</span>
-          <span className="mobile-nav-label">Insights</span>
-        </button>
-        <button
-          className={`mobile-nav-btn ${mobileTab === "chat" ? "mobile-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("chat")}
-        >
-          <span>💬</span>
-          <span className="mobile-nav-label">Chat</span>
-        </button>
+        {[
+          { id: "journal", icon: "📝", label: "Journal" },
+          { id: "insights", icon: "📈", label: "Insights" },
+          { id: "chat", icon: "💬", label: "Chat" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            className={`mobile-nav-btn ${mobileTab === t.id ? "mobile-nav-btn--active" : ""}`}
+            onClick={() => setMobileTab(t.id)}
+          >
+            <span>{t.icon}</span>
+            <span className="mobile-nav-label">{t.label}</span>
+          </button>
+        ))}
       </div>
 
       {showOTD && <OnThisDayModal entries={onThisDay} onClose={() => setShowOTD(false)} />}
-      {showChats && <ChatHistoryDrawer currentSessionId={sessionId} onClose={() => setShowChats(false)} />}
+      {showChats && (
+        <ChatHistoryDrawer
+          currentSessionId={sessionId}
+          onClose={() => setShowChats(false)}
+          onResumeSession={handleResumeSession}
+        />
+      )}
       {showProfile && (
         <ProfileModal
           username={username}

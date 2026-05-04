@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { sendChat } from "../api.js";
+import { sendChat, createChatSession, storeSessionId } from "../api.js";
 import MdText from "./MdText.jsx";
 import ApiKeyModal from "./ApiKeyModal.jsx";
 
@@ -12,12 +12,15 @@ const SUGGESTIONS = [
 
 export default function AiChat({
   sessionId,
+  setSessionId,
+  msgs,
+  setMsgs,
+  onNewChat,
   chatCount: initialChatCount,
   freeLimit,
   hasApiKey: initialHasApiKey,
   isOwner,
 }) {
-  const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatCount, setChatCount] = useState(initialChatCount || 0);
@@ -36,12 +39,26 @@ export default function AiChat({
     if (!msg || loading) return;
     setInput("");
 
+    // Lazy session creation — only on first message of a new conversation
+    let sid = sessionId;
+    if (!sid) {
+      try {
+        const session = await createChatSession();
+        sid = session.session_id;
+        setSessionId(sid);
+        storeSessionId(sid);
+      } catch (e) {
+        setMsgs([...msgs, { role: "user", content: msg }, { role: "assistant", content: "Failed to create session. Please try again." }]);
+        return;
+      }
+    }
+
     const newMsgs = [...msgs, { role: "user", content: msg }];
     setMsgs(newMsgs);
     setLoading(true);
 
     try {
-      const data = await sendChat(newMsgs, sessionId);
+      const data = await sendChat(newMsgs, sid);
 
       if (data.error === "free_limit_reached") {
         setMsgs(msgs); // revert user message
@@ -67,9 +84,14 @@ export default function AiChat({
 
   return (
     <div style={{ flex: 1, padding: "var(--space-lg)", display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
+      {/* Header with New Chat button */}
       <div style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 10, flexWrap: "wrap" }}>
         <div className="panel-title">Your AI Companion</div>
+        {msgs.length > 0 && (
+          <button className="new-chat-btn" onClick={onNewChat} title="Start new conversation">
+            🆕 New Chat
+          </button>
+        )}
         {isOwner ? (
           <span className="ai-badge ai-badge--owner">✓ Owner — unlimited</span>
         ) : hasApiKey ? (

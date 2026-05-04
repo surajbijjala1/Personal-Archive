@@ -147,3 +147,7 @@ export async function getChatSessions() {
 export async function getChatMessages(sessionId) {
   return authFetch(`/chats/sessions/${sessionId}/messages`);
 }
+
+export async function deleteChatSession(sessionId) {
+  return authFetch(`/chats/sessions/${sessionId}`, { method: "DELETE" });
+}

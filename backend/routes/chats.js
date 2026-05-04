@@ -14,7 +14,7 @@ const auth = (req, res, next) => {
   }
 };
 
-// POST /chats/session — create a new chat session (called on every login)
+// POST /chats/session — create a new chat session
 router.post("/session", auth, async (req, res) => {
   const username = req.user.username;
   const { data, error } = await supabase
@@ -27,7 +27,7 @@ router.post("/session", auth, async (req, res) => {
   res.json({ session_id: data.id, created_at: data.created_at });
 });
 
-// GET /chats/sessions — list all sessions for the user
+// GET /chats/sessions — list only non-empty sessions for the user
 router.get("/sessions", auth, async (req, res) => {
   const username = req.user.username;
 
@@ -39,7 +39,7 @@ router.get("/sessions", auth, async (req, res) => {
 
   if (!sessions) return res.json([]);
 
-  // Attach message count to each session
+  // Attach message count and filter out empty sessions
   const enriched = await Promise.all(
     sessions.map(async (s) => {
       const { count } = await supabase
@@ -50,10 +50,11 @@ router.get("/sessions", auth, async (req, res) => {
     })
   );
 
-  res.json(enriched);
+  // Only return sessions that have at least 1 message
+  res.json(enriched.filter((s) => s.message_count > 0));
 });
 
-// GET /chats/sessions/:id/messages — get all messages for a session (read-only)
+// GET /chats/sessions/:id/messages — get all messages for a session
 router.get("/sessions/:id/messages", auth, async (req, res) => {
   const username = req.user.username;
   const sessionId = req.params.id;
@@ -108,6 +109,38 @@ router.post("/sessions/:id/messages", auth, async (req, res) => {
     .insert({ session_id: sessionId, role, content });
 
   if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// DELETE /chats/sessions/:id — delete a session and all its messages
+router.delete("/sessions/:id", auth, async (req, res) => {
+  const sessionId = req.params.id;
+  const username = req.user.username;
+
+  // Verify ownership
+  const { data: session } = await supabase
+    .from("chat_sessions")
+    .select("username")
+    .eq("id", sessionId)
+    .single();
+
+  if (!session || session.username !== username) {
+    return res.status(403).json({ error: "Not authorized" });
+  }
+
+  // Delete messages first (FK constraint), then session
+  const { error: msgErr } = await supabase.from("chat_messages").delete().eq("session_id", sessionId);
+  if (msgErr) {
+    console.error("[ERROR] Delete chat messages:", msgErr.message);
+    return res.status(500).json({ error: msgErr.message });
+  }
+
+  const { error: sessErr } = await supabase.from("chat_sessions").delete().eq("id", sessionId);
+  if (sessErr) {
+    console.error("[ERROR] Delete chat session:", sessErr.message);
+    return res.status(500).json({ error: sessErr.message });
+  }
+
   res.json({ success: true });
 });
 

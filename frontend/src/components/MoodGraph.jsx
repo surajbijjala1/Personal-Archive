@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pack, hierarchy } from "d3-hierarchy";
 import { moodColor } from "../utils.js";
 
 // ─── Bubble chart helpers ────────────────────────────────────────────────────
@@ -21,77 +22,141 @@ function buildBubbleData(entries) {
 }
 
 function BubbleChart({ entries }) {
-  const [hovered, setHovered] = useState(null);
+  const [selected, setSelected] = useState(null); // clicked bubble tag
   const data = buildBubbleData(entries);
   if (data.length < 2) return null;
 
-  const maxCount = Math.max(...data.map((d) => d.count));
-  const minR = 30, maxR = 70;
+  // Dynamic sizing — more bubbles = taller chart
+  const W = 340;
+  const H = Math.max(240, Math.min(380, 160 + data.length * 22));
+  const root = hierarchy({ children: data }).sum((d) => d.count);
+  const packed = pack().size([W - 20, H - 20]).padding(6)(root);
+  const leaves = packed.leaves();
 
-  // Arrange bubbles: simple row layout, wrapping when needed
-  // Sizes: radius proportional to count
-  const bubbles = data.map((d) => ({
-    ...d,
-    r: minR + ((d.count - 1) / Math.max(1, maxCount - 1)) * (maxR - minR),
-    color: moodColor(Math.round(d.avgMood)),
-  }));
+  // Find the selected leaf for tooltip positioning
+  const selectedLeaf = selected ? leaves.find((l) => l.data.tag === selected) : null;
+
+  const handleClick = (tag) => {
+    setSelected((prev) => (prev === tag ? null : tag));
+  };
 
   return (
     <div style={{ marginTop: 28 }}>
       <div className="section-label">Where your best thoughts come from</div>
       <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: 14 }}>
-        Bubble size = entry count · Color = average mood
+        Bubble size = entry count · Color = average mood · Tap a bubble for details
       </div>
-      <div className="bubble-chart">
-        {bubbles.map((b) => (
-          <div
-            key={b.tag}
-            className="bubble"
-            style={{
-              width: b.r * 2,
-              height: b.r * 2,
-              borderRadius: "50%",
-              background: "#fff",
-              border: `3px solid ${b.color}`,
-              boxShadow: `0 2px 10px ${b.color}30`,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "default",
-              position: "relative",
-              flexShrink: 0,
-              transition: "transform 0.15s, box-shadow 0.15s",
-            }}
-            onMouseEnter={() => setHovered(b.tag)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            <div style={{
-              fontSize: b.r > 45 ? "13px" : "11px",
-              fontWeight: 600,
-              color: b.color,
-              textAlign: "center",
-              padding: "0 6px",
-              lineHeight: 1.3,
-              maxWidth: b.r * 1.6,
-              wordBreak: "break-word",
-              overflow: "hidden",
-            }}>
-              {b.tag.length > 14 ? b.tag.slice(0, 12) + "…" : b.tag}
-            </div>
-            <div style={{ fontSize: "11px", color: b.color + "cc", marginTop: 2 }}>
-              ×{b.count}
-            </div>
 
-            {hovered === b.tag && (
-              <div className="bubble-tooltip">
-                <strong>{b.tag}</strong>
-                <div>{b.count} {b.count === 1 ? "entry" : "entries"}</div>
-                <div>Avg mood: {b.avgMood.toFixed(1)}/10</div>
+      {/* Rectangular jar container */}
+      <div
+        className="bubble-jar"
+        onClick={(e) => {
+          // Dismiss tooltip if clicking the background
+          if (e.target === e.currentTarget || e.target.closest(".bubble-jar-inner")) {
+            setSelected(null);
+          }
+        }}
+      >
+        <div className="bubble-jar-inner" style={{ position: "relative" }}>
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="bubble-svg"
+            style={{ display: "block", width: "100%" }}
+          >
+            {leaves.map((leaf, i) => {
+              const d = leaf.data;
+              const color = moodColor(Math.round(d.avgMood));
+              const isSelected = selected === d.tag;
+              const floatDur = (2.5 + Math.random() * 1.5).toFixed(2);
+              const floatDelay = (Math.random() * 2).toFixed(2);
+              // Offset by padding so bubbles sit inside the jar
+              const cx = leaf.x + 10;
+              const cy = leaf.y + 10;
+
+              return (
+                <g
+                  key={d.tag}
+                  className="bubble-group"
+                  style={{ animationDelay: `${i * 80}ms`, cursor: "pointer" }}
+                  onClick={(e) => { e.stopPropagation(); handleClick(d.tag); }}
+                >
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={leaf.r}
+                    fill="#fff"
+                    stroke={color}
+                    strokeWidth={isSelected ? "3.5" : "2.5"}
+                    className="bubble-circle"
+                    style={{
+                      "--float-dur": `${floatDur}s`,
+                      "--float-delay": `${floatDelay}s`,
+                      filter: isSelected
+                        ? `drop-shadow(0 4px 14px ${color}50)`
+                        : `drop-shadow(0 2px 6px ${color}20)`,
+                      transform: isSelected ? "scale(1.06)" : "scale(1)",
+                      transformOrigin: `${cx}px ${cy}px`,
+                      transition: "transform 0.2s ease, filter 0.2s ease, stroke-width 0.2s",
+                    }}
+                  />
+                  <text
+                    x={cx}
+                    y={cy - (leaf.r > 35 ? 5 : 2)}
+                    textAnchor="middle"
+                    fontSize={leaf.r > 45 ? 12 : leaf.r > 30 ? 10 : 8}
+                    fontWeight="600"
+                    fill={color}
+                    className="bubble-text"
+                    style={{ "--float-dur": `${floatDur}s`, "--float-delay": `${floatDelay}s`, pointerEvents: "none" }}
+                  >
+                    {d.tag.length > 14 ? d.tag.slice(0, 12) + "…" : d.tag}
+                  </text>
+                  <text
+                    x={cx}
+                    y={cy + (leaf.r > 35 ? 12 : 9)}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill={color + "cc"}
+                    className="bubble-text"
+                    style={{ "--float-dur": `${floatDur}s`, "--float-delay": `${floatDelay}s`, pointerEvents: "none" }}
+                  >
+                    ×{d.count}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Tooltip overlay — rendered as HTML on top of SVG, always in foreground */}
+          {selectedLeaf && (() => {
+            const d = selectedLeaf.data;
+            const color = moodColor(Math.round(d.avgMood));
+            // Convert SVG coords to percentage positions within the container
+            const leftPct = ((selectedLeaf.x + 10) / W) * 100;
+            const topPct = ((selectedLeaf.y + 10) / H) * 100;
+            const showBelow = topPct < 30;
+
+            return (
+              <div
+                className="bubble-info-card"
+                style={{
+                  left: `${leftPct}%`,
+                  top: showBelow ? `calc(${topPct}% + ${selectedLeaf.r + 8}px)` : `calc(${topPct}% - ${selectedLeaf.r + 8}px)`,
+                  transform: showBelow ? "translateX(-50%)" : "translateX(-50%) translateY(-100%)",
+                  borderColor: color,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: 3 }}>{d.tag}</div>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  {d.count} {d.count === 1 ? "entry" : "entries"}
+                </div>
+                <div style={{ fontSize: "12px", color }}>
+                  Avg mood: {d.avgMood.toFixed(1)}/10
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          })()}
+        </div>
       </div>
     </div>
   );
